@@ -9,6 +9,7 @@ from urllib.parse import quote
 from config.Headers import headers
 import time
 import random
+import codecs
 
 
 # TODO 有些公司对有的内容没有数据，而有的公司对这些内容有数据，有的甚至需要翻页，如果处理0，单页，翻页这三种情况;
@@ -17,7 +18,7 @@ import random
 # TODO【最终解决方案】从firm url中爬取相应相的具体数目，再判断是否要爬，如果爬是否需要翻页; 不翻页的按照page=1来处理
 # TODO check一下股东信息是不是都小于10个，如果有超过10个的拿出来看看，改变下爬取策略
 # TODO check一下税务信用是不是都小于10个，如果有超过10个的拿出来看看，改变下爬取策略
-
+# TODO 股东信息和税务信息即便是超过10个也不会翻页。因此不用改变爬取策略
 
 class QCC():
 
@@ -27,7 +28,7 @@ class QCC():
 
 
     def get_proxies(self, proxies_path):
-        with open(proxies_path, "r")  as f:
+        with codecs.open(proxies_path, "r", "utf-8") as f:
             proxies = json.loads(f.read())
         return proxies
 
@@ -122,6 +123,14 @@ class QCC():
             numOfpartnern = int(numOfpartnern)
         except:
             numOfpartnern = 0
+
+
+        # # 股东信息不需要重新爬
+        # page_partner = 1
+        # partner_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=base&box=partners'%(company_code, companyName, str(page_partner))
+        # response_text = self.get_web_text(partner_url,headers, proxy)
+        # soup = BeautifulSoup(response_text, 'lxml')
+
 
         shareholders = {}
         if numOfpartnern > 0:
@@ -340,6 +349,7 @@ class QCC():
 
     def get_run(self, info, run_url, headers, proxy, company_code, companyName):
         run = {}
+        # 税务信用直接在run_url中抓取，即便超过10个也会在首页显示的
         response_text = self.get_web_text(run_url, headers, proxy)
         soup = BeautifulSoup(response_text, 'lxml')
 
@@ -356,9 +366,9 @@ class QCC():
         soup = BeautifulSoup(response_text, 'lxml')
 
         try:
-            divlist = soup.select("div.row div.col-sm-12 div.company-nav div.company-nav-contain div")
-            numOfshareHolders = divlist[0].select("div.company-nav-items a")[3].select("span.text-primary")[0].text.strip()
-            numOftaxCredit = divlist[4].select("div.company-nav-items a[data-pos=taxCreditList]")[0].select("span.text-primary")[0].text.strip()
+            divlist = soup.select("div.row div.col-sm-12 div.company-nav div.company-nav-contain div[class^='company-nav-tab']")
+            numOfshareHolders = divlist[0].select("div.company-nav-items a[data-pos='partnern']")[0].select("span.text-primary")[0].text.strip()
+            numOftaxCredit = divlist[2].select("div.company-nav-items a[data-pos='taxCreditList']")[0].select("span.text-primary")[0].text.strip()
             return numOfshareHolders, numOftaxCredit
         except:
             return '', ''
@@ -398,13 +408,13 @@ class QCC():
         # self.get_base(info, firm_url, headers, proxy, company_code, companyName)
         # self.get_susong(info, firm_url, headers, proxy, company_code, companyName)
         # self.get_asset(info, firm_url, headers, proxy, company_code, companyName)
-        # self.get_run(info, run_url, headers, proxy, company_code, companyName)
-        print(info)
+        self.get_run(info, run_url, headers, proxy, company_code, companyName)
+
         return info
 
 
     def write_to_file(self, content, filepath):
-        with open(filepath, "a") as f:
+        with codecs.open(filepath, "a", "utf-8") as f:
             f.write(content)
             f.write('\n')
 
@@ -436,24 +446,27 @@ class QCC():
 
 if __name__ == "__main__":
     spider = QCC("./config/not_crawled_company", "./config/proxies")
-    result_path = "./config/ret"
-    companies = []
-    with open("./config/companies", "r") as f:
-        line = f.readline()
-        while line:
-            companies.append(line.strip())
-            line = f.readline()
+    info = spider.run("阿里巴巴")
+    print(info)
 
-    for comp in companies:
-        info = spider.run(comp)
-        try:
-            if len(info)>0:
-                with open(result_path, "a") as f:
-                    f.write(comp)
-                    f.write('\t')
-                    f.write(json.dumps(info))
-                    f.write("\n")
-        except:
-            continue
-        time.sleep(random.uniform(0.5,1.0))
+    # result_path = "./config/ret"
+    # companies = []
+    # with codecs.open("./config/companies", "r", "utf-8") as f:
+    #     line = f.readline()
+    #     while line:
+    #         companies.append(line.strip())
+    #         line = f.readline()
+    #
+    # for comp in companies:
+    #     info = spider.run(comp)
+    #     try:
+    #         if len(info)>0:
+    #             with codecs.open(result_path, "a","utf-8") as f:
+    #                 f.write(comp)
+    #                 f.write('\t')
+    #                 f.write(json.dumps(info))
+    #                 f.write("\n")
+    #     except:
+    #         continue
+    #     time.sleep(random.uniform(0.5,1.0))
 

@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 import re
 import http.client
 import json
-
+import codecs
 
 def crawl_proxy(page):
     """
@@ -87,7 +87,7 @@ def verifyproxy(proxies):
             print("代理不可用:{}:{}".format(ip, port))
     return usefulProxies
 
-proxies = get_proxy(4)
+proxies = get_proxy(10)
 
-with open("./config/proxies", "w") as f:
+with codecs.open("./config/proxies", "w", "utf-8") as f:
     f.write(json.dumps(proxies))
