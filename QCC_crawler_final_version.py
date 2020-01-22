@@ -68,7 +68,7 @@ class QCC():
 
         return companyName
 
-    def get_base(self, info, base_url, headers, proxy, company_code, companyName):
+    def get_base(self, info, base_url, headers, proxy, company_code, companyName, numbers):
         base = {}
         response_text = self.get_web_text(base_url, headers, proxy)
         soup = BeautifulSoup(response_text, 'lxml')
@@ -116,13 +116,13 @@ class QCC():
         scope_of_business = soup.select("div.row div.col-sm-12 table.ntable tr")[11].select("td")[1].text.strip()
         base['经营范围'] = scope_of_business
 
+        # partnern = soup.select("div.row div.col-sm-12 div.data_div section#partnern")[0]
+        # try:
+        #     numOfpartnern = partnern.select("div.tnavtab-content div.tcaption span.tbadge")[0].text
+        #     numOfpartnern = int(numOfpartnern)
+        # except:
+        #     numOfpartnern = 0
 
-        partnern = soup.select("div.row div.col-sm-12 div.data_div section#partnern")[0]
-        try:
-            numOfpartnern = partnern.select("div.tnavtab-content div.tcaption span.tbadge")[0].text
-            numOfpartnern = int(numOfpartnern)
-        except:
-            numOfpartnern = 0
 
 
         # # 股东信息不需要重新爬
@@ -131,9 +131,11 @@ class QCC():
         # response_text = self.get_web_text(partner_url,headers, proxy)
         # soup = BeautifulSoup(response_text, 'lxml')
 
-
+        numOfpartnern = numbers['numOfshareHolders']
+        numOfpartnern = int(re.findall(r'\d+', numOfpartnern)[0])
         shareholders = {}
         if numOfpartnern > 0:
+            partnern = soup.select("div.row div.col-sm-12 div.data_div section#partnern")[0]
             partnern_tr = partnern.select("div.tnavtab-content div.tnavtab-box table.ntable.ntable-odd.npth.nptd tr")
             for ind in range(1, numOfpartnern + 1):
                 tr = partnern_tr[ind]
@@ -147,24 +149,51 @@ class QCC():
                 shareholders[ind]['认缴出资金额'] = capital_contribution
                 capital_contribution_date = tr.select("td.text-center")[2].text.strip()
                 shareholders[ind]['认缴出资日期'] = capital_contribution_date
-
+                time.sleep(random.uniform(0.5, 1.5))
         base['股东信息'] = shareholders
         info['base'] = base
 
 
-    def get_susong(self, info, susong_url, headers, proxy, company_code, companyName):
+    def get_susong(self, info, susong_url, headers, proxy, company_code, companyName, numbers):
         susong = {}
         # response_text = self.get_web_text(susong_url, headers, proxy)
         # soup = BeautifulSoup(response_text, 'lxml')
 
-
+        numOfwenshu = numbers['numOfwenshu']
+        numOfwenshu = int(re.findall(r'\d+', numOfwenshu)[0])
         # 通过对比 例如裁判文书391 ，与序号的大小来判断是否还需要继续翻页
-        page = str(3)
-        wenshu_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=susong&box=wenshu&casetype=&casereason=' % (
-        company_code, companyName, page)
-        wenshu_ret = self.get_web_text(wenshu_url, headers, proxy)
-        print(wenshu_ret)
+        wenshulist = {}
+        if numOfwenshu > 0:
+            page_wenshu = 1
+            wenshu_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=susong&box=wenshu&casetype=&casereason=' % (company_code, companyName, page_wenshu)
+            wenshu_ret = self.get_web_text(wenshu_url, headers, proxy)
+            soup = BeautifulSoup(wenshu_ret, 'lxml')
+            numOfHasCrawledList = 0
+            while numOfHasCrawledList < numOfwenshu:
+                wenshulist_tr = soup.select("table.ntable.ntable-odd tr")
+                numOfCurrentList = len(wenshulist_tr) - 1
+                numOfHasCrawledList += numOfCurrentList
+                for ind in range(1, numOfCurrentList+1):
+                    tr = wenshulist_tr[ind]
+                    index = int(tr.select("td.tx")[0].text.strip())
+                    title = tr.select("a[target='_blank'] h3.seo.font-14")[0].text.strip()
+                    anyou = tr.select("td[width='12%']")[0].text.strip()
+                    fabudate = tr.select("td[width='103']")[0].text.strip()
+                    annumber = tr.select("td[width='15%']")[0].text.strip()
+                    anjianshenfen = tr.select("td[width='20%']")[0].text.strip()
+                    zhixingfayuan = tr.select("td[width='13%']")[0].text.strip()
+                    wenshulist[index] = {"裁判文书标题": title, "案由": anyou, "发布日期": fabudate, "案号": annumber, "案件身份": anjianshenfen, "执行法院": zhixingfayuan}
+                    time.sleep(random.uniform(0.5, 1.5))
+                print('[wenshu_page_%s has been crawled.]' % str(page_wenshu))
+                print('[wenshu_num_%s has been crawled.]'%str(numOfHasCrawledList))
 
+                if numOfHasCrawledList < numOfwenshu:
+                    page_wenshu += 1
+                    wenshu_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=susong&box=wenshu&casetype=&casereason=' % (company_code, companyName, page_wenshu)
+                    wenshu_ret = self.get_web_text(wenshu_url, headers, proxy)
+                    soup = BeautifulSoup(wenshu_ret, 'lxml')
+
+        susong['裁判文书'] = wenshulist
         info['susong'] = susong
 
     def get_asset(self, info, asset_url, headers, proxy, company_code, companyName):
@@ -347,31 +376,84 @@ class QCC():
         # print(response_text)
 
 
-    def get_run(self, info, run_url, headers, proxy, company_code, companyName):
+    def get_run(self, info, run_url, headers, proxy, company_code, companyName, numbers):
         run = {}
         # 税务信用直接在run_url中抓取，即便超过10个也会在首页显示的
         response_text = self.get_web_text(run_url, headers, proxy)
         soup = BeautifulSoup(response_text, 'lxml')
 
+        numOftaxCredit = numbers['numOftaxCredit']
+        numOftaxCredit = int(re.findall(r'\d+', numOftaxCredit)[0])
+        taxcreditlist = {}
+        if numOftaxCredit > 0:
+            taxcredit = soup.select("section#taxCreditList table.ntable.ntable-odd")[0]
+            taxcredit_tr = taxcredit.select("tr")
+            for ind in range(1, numOftaxCredit+1):
+                index = taxcredit_tr[2*ind].select("td.tx")[0].text.strip()
+                pingjiayear = taxcredit_tr[2*ind].select("td.text-center")[0].text.strip()
+                nashuirenid = taxcredit_tr[2*ind].select("td.text-center")[1].text.strip()
+                level = taxcredit_tr[2*ind].select("td.text-center")[2].text.strip()
+                pingjiadanwei = taxcredit_tr[2*ind].select("td.text-center")[3].text.strip()
+                taxcreditlist[index] = {"评价年度": pingjiayear, "纳税人识别号": nashuirenid, "纳税信用等级": level, "评价单位": pingjiadanwei}
+                time.sleep(random.uniform(0.5, 1.5))
 
-
+        run['税务信用'] = taxcreditlist
         info['run'] = run
-
-
 
 
 
     def get_item_nums(self, firm_url, headers, proxy):
         response_text = self.get_web_text(firm_url, headers, proxy)
         soup = BeautifulSoup(response_text, 'lxml')
+        numbers = {}
+        divlist = soup.select("div.row div.col-sm-12 div.company-nav div.company-nav-contain div[class^='company-nav-tab']")
+        if divlist:
+            try:
+                numOfshareHolders = divlist[0].select("div.company-nav-items a[data-pos='partnern']")[0].select("span.text-primary")[0].text.strip()
+            except:
+                numOfshareHolders = 0
+            try:
+                numOfbrand = divlist[5].select("div.company-nav-items a[data-pos='shangbiaolist']")[0].select("span.text-primary")[0].text.strip()
+            except:
+                numOfbrand = 0
+            try:
+                numOfpatent = divlist[5].select("div.company-nav-items a[data-pos='zhuanlilist']")[0].select("span.text-primary")[0].text.strip()
+            except:
+                numOfpatent = 0
+            try:
+                numOfcertificate = divlist[5].select("div.company-nav-items a[data-pos='zhengshulist']")[0].select("span.text-primary")[0].text.strip()
+            except:
+                numOfcertificate = 0
+            try:
+                numOfcopyright = divlist[5].select("div.company-nav-items a[data-pos='zzqlist']")[0].select("span.text-primary")[0].text.strip()
+            except:
+                numOfcopyright = 0
+            try:
+                numOfrjzzq = divlist[5].select("div.company-nav-items a[data-pos='rjzzqlist']")[0].select("span.text-primary")[0].text.strip()
+            except:
+                numOfrjzzq = 0
+            try:
+                numOfwenshu = divlist[1].select("div.company-nav-items a[data-pos='wenshulist']")[0].select("span.text-danger")[0].text.strip()
+            except:
+                numOfwenshu = 0
+            try:
+                numOftaxCredit = divlist[2].select("div.company-nav-items a[data-pos='taxCreditList']")[0].select("span.text-primary")[0].text.strip()
+            except:
+                numOftaxCredit = 0
 
-        try:
-            divlist = soup.select("div.row div.col-sm-12 div.company-nav div.company-nav-contain div[class^='company-nav-tab']")
-            numOfshareHolders = divlist[0].select("div.company-nav-items a[data-pos='partnern']")[0].select("span.text-primary")[0].text.strip()
-            numOftaxCredit = divlist[2].select("div.company-nav-items a[data-pos='taxCreditList']")[0].select("span.text-primary")[0].text.strip()
-            return numOfshareHolders, numOftaxCredit
-        except:
-            return '', ''
+            numbers['numOfshareHolders'] = numOfshareHolders
+            numbers['numOfbrand'] = numOfbrand
+            numbers['numOfpatent'] = numOfpatent
+            numbers['numOfcertificate'] = numOfcertificate
+            numbers['numOfcopyright'] = numOfcopyright
+            numbers['numOfrjzzq'] = numOfrjzzq
+            numbers['numOfwenshu'] = numOfwenshu
+            numbers['numOftaxCredit'] = numOftaxCredit
+
+        return numbers
+
+
+
 
 
 
@@ -390,25 +472,29 @@ class QCC():
         try:
             companyName = quote(companyName[0].text)
         except Exception as e:
-            print("[can't get companyName_quote]", e)
+            print(e)
+            raise Exception("[can't get companyName_quote]")
 
 
         # base_url = 'https://www.qichacha.com/firm_%s.html#base'%company_code
         # susong_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&tab=susong'%(company_code, companyName)
         # asset_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&tab=asset'%(company_code, companyName)
+        # 上面三个url用不到了
+
         firm_url = 'https://www.qichacha.com/firm_%s.html' % (company_code)
         run_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&tab=run' % (company_code, companyName)
 
 
-        shareholders, taxcredit = self.get_item_nums(firm_url, headers, proxy)
-        if shareholders:
-            info['shareholders'] = shareholders
-            info['taxcredit'] = taxcredit
+        numbers = self.get_item_nums(firm_url, headers, proxy)
+        if numbers:
+            pass
+        else:
+            raise Exception("[can't get numbers]")
 
-        # self.get_base(info, firm_url, headers, proxy, company_code, companyName)
-        # self.get_susong(info, firm_url, headers, proxy, company_code, companyName)
-        # self.get_asset(info, firm_url, headers, proxy, company_code, companyName)
-        self.get_run(info, run_url, headers, proxy, company_code, companyName)
+        # self.get_base(info, firm_url, headers, proxy, company_code, companyName, numbers)
+        # self.get_susong(info, firm_url, headers, proxy, company_code, companyName, numbers)
+        self.get_asset(info, firm_url, headers, proxy, company_code, companyName)
+        # self.get_run(info, run_url, headers, proxy, company_code, companyName, numbers)
 
         return info
 
@@ -446,7 +532,7 @@ class QCC():
 
 if __name__ == "__main__":
     spider = QCC("./config/not_crawled_company", "./config/proxies")
-    info = spider.run("阿里巴巴")
+    info = spider.run("百度")
     print(info)
 
     # result_path = "./config/ret"
