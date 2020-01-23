@@ -137,10 +137,10 @@ class QCC():
             partnern = soup.select("div.row div.col-sm-12 div.data_div section#partnern")[0]
             partnern_tr = partnern.select("div.tnavtab-content div.tnavtab-box table.ntable.ntable-odd.npth.nptd tr")
             for ind in range(1, numOfpartnern + 1):
-                tr = partnern_tr[ind]
+                tr = partnern_tr[ind*2-1]
                 ind = str(ind)
                 shareholders[ind] = {}
-                holders_basic = tr.select("table.insert-table tr td")[1].text
+                holders_basic = tr.select("table.insert-table tr td")[1].text.strip()
                 shareholders[ind]['股东及出资信息'] = holders_basic
                 stake = tr.select("td.text-center")[0].text.strip()
                 shareholders[ind]['持股比例'] = stake
@@ -357,7 +357,7 @@ class QCC():
 
                     certificate_detail_dct = {}
                     certificate_detail_id = tr.select("td")[2].select("a")[0]['onclick'][8:-2]
-                    print(certificate_detail_id)
+                    # print(certificate_detail_id)
                     querystring = {"id": certificate_detail_id}
                     trial_times = 0
                     response_text_detail = None
@@ -553,7 +553,8 @@ class QCC():
             companyName = self.get_company_name(url, headers, proxy)
             try_times += 1
         try:
-            companyName = quote(companyName[0].text)
+            info['companyName'] = companyName[0].text.strip()
+            companyName = quote(companyName[0].text.strip())
         except Exception as e:
             print(e)
             raise Exception("[can't get companyName_quote]")
@@ -600,29 +601,29 @@ class QCC():
             self.write_to_file(company, self.notSuccPath)
             return
 
-        info = self.get_detail(ret, headers, proxy)
-        return info
+        # info = self.get_detail(ret, headers, proxy)
+        # return info
 
-        # # 若最终结果为空，说明没有爬到company_code
-        # if ret:
-        #     print('[company_code: %s]'%str(ret))
-        #     try:
-        #         info = self.get_detail(ret, headers, proxy)
-        #         return info
-        #     except Exception as e:
-        #         print("[can't get_detail]", e)
-        #         self.write_to_file(company, self.notSuccPath)
-        #         return
-        # else:
-        #     print("[get None company_code]")
-        #     self.write_to_file(company, self.notSuccPath)
-        #     return
+        # 若最终结果为空，说明没有爬到company_code
+        if ret:
+            print('[company_code: %s]'%str(ret))
+            try:
+                info = self.get_detail(ret, headers, proxy)
+                return info
+            except Exception as e:
+                print("[can't get_detail]", e)
+                self.write_to_file(company, self.notSuccPath)
+                return
+        else:
+            print("[get None company_code]")
+            self.write_to_file(company, self.notSuccPath)
+            return
 
 
 
 if __name__ == "__main__":
     spider = QCC("./config/not_crawled_company", "./config/proxies")
-    info = spider.run("北京视讯电子技术有限责任公司")
+    info = spider.run("北京金漆镶嵌有限责任公司")
     print(info)
 
     # result_path = "./config/ret"
