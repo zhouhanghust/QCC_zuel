@@ -10,6 +10,8 @@ from config.Headers import headers
 import time
 import random
 import codecs
+import logging
+
 
 
 # TODO 有些公司对有的内容没有数据，而有的公司对这些内容有数据，有的甚至需要翻页，如果处理0，单页，翻页这三种情况;
@@ -22,10 +24,10 @@ import codecs
 
 class QCC():
 
-    def __init__(self, notSuccPath, proxies_path):
+    def __init__(self, notSuccPath, proxies_path, logger):
         self.notSuccPath = notSuccPath
         self.proxies = self.get_proxies(proxies_path)
-
+        self.logger = logger
 
     def get_proxies(self, proxies_path):
         with codecs.open(proxies_path, "r", "utf-8") as f:
@@ -41,17 +43,17 @@ class QCC():
     def get_web_text(self, url, headers, proxy, params=None, post=False):
         if not post:
             if params:
-                response = requests.request("GET", url, headers=headers, params=params, proxies=proxy)
+                response = requests.request("GET", url, headers=headers, params=params, proxies=proxy,timeout=2)
             else:
-                response = requests.request("GET", url, headers=headers, proxies=proxy)
+                response = requests.request("GET", url, headers=headers, proxies=proxy,timeout=2)
         else:
-            response = requests.request("POST", url, headers=headers, data=params, proxies=proxy)
+            response = requests.request("POST", url, headers=headers, data=params, proxies=proxy,timeout=2)
 
         response.encoding = 'utf-8'
         return response.text
 
     def get_para(self, company, headers, proxy):
-        url = "https://www.qichacha.com/search"
+        url = "https://www.qcc.com/search"
         querystring = {"key": company}
         response_text = self.get_web_text(url, headers, proxy, querystring)
         para = re.findall('href="/firm_(.*?).html" target="_blank" class="ma_h1">', response_text, re.S)
@@ -73,65 +75,55 @@ class QCC():
         response_text = self.get_web_text(base_url, headers, proxy)
         soup = BeautifulSoup(response_text, 'lxml')
         # print(response_text)
-        legal_representative = soup.select("div.row div.col-sm-12 table.ntable div.bpen a.bname")[0].text
+        trs = soup.select("div.row div.col-sm-12 table.ntable tr")
+        legal_representative = trs[0].select("td")[1].select("div.bpen h2")[0].text
         base['法定代表人'] = legal_representative
-        registered_capital = soup.select("div.row div.col-sm-12 table.ntable tr")[0].select("td")[3].text
+        registered_capital = trs[1].select("td")[1].text.strip()
         base['注册资本'] = registered_capital
-        actually_capital = soup.select("div.row div.col-sm-12 table.ntable tr")[1].select("td")[1].text
+        actually_capital = trs[1].select("td")[3].text.strip()
         base['实缴资本'] = actually_capital
-        management_forms = soup.select("div.row div.col-sm-12 table.ntable tr")[2].select("td")[1].text.strip()
+        management_forms = trs[0].select("td")[3].text.strip()
         base['经营状态'] = management_forms
-        establishment_date = soup.select("div.row div.col-sm-12 table.ntable tr")[2].select("td")[3].text.strip()
+        establishment_date = trs[0].select("td")[5].text.strip()
         base['成立日期'] = establishment_date
-        unified_social_credit_code = soup.select("div.row div.col-sm-12 table.ntable tr")[3].select("td")[1].text.strip()
+        unified_social_credit_code = trs[2].select("td")[1].text.strip()
         base['统一社会信用代码'] = unified_social_credit_code
-        taxpayer_identification_number = soup.select("div.row div.col-sm-12 table.ntable tr")[3].select("td")[3].text.strip()
+        taxpayer_identification_number = trs[3].select("td")[1].text.strip()
         base['纳税人识别号'] = taxpayer_identification_number
-        registered_number = soup.select("div.row div.col-sm-12 table.ntable tr")[4].select("td")[1].text.strip()
+        registered_number = trs[2].select("td")[5].text.strip()
         base['注册号'] = registered_number
-        organization_code = soup.select("div.row div.col-sm-12 table.ntable tr")[4].select("td")[3].text.strip()
+        organization_code = trs[2].select("td")[3].text.strip()
         base['组织机构代码'] = organization_code
-        company_type = soup.select("div.row div.col-sm-12 table.ntable tr")[5].select("td")[1].text.strip()
+        company_type = trs[4].select("td")[1].text.strip()
         base['企业类型'] = company_type
-        subodinate_industry = soup.select("div.row div.col-sm-12 table.ntable tr")[5].select("td")[3].text.strip()
+        subodinate_industry = trs[3].select("td")[5].text.strip()
         base['所属行业'] = subodinate_industry
-        approval_date = soup.select("div.row div.col-sm-12 table.ntable tr")[6].select("td")[1].text.strip()
+        approval_date = trs[1].select("td")[5].text.strip()
         base['核准日期'] = approval_date
-        registration_authority = soup.select("div.row div.col-sm-12 table.ntable tr")[6].select("td")[3].text.strip()
+        registration_authority = trs[4].select("td")[5].text.strip()
         base['登记机关'] = registration_authority
-        area = soup.select("div.row div.col-sm-12 table.ntable tr")[7].select("td")[1].text.strip()
+        area = trs[5].select("td")[5].text.strip()
         base['所属地区'] = area
-        english_name = soup.select("div.row div.col-sm-12 table.ntable tr")[7].select("td")[3].text.strip()
+        english_name = trs[6].select("td")[3].text.strip()
         base['英文名'] = english_name
-        former_name = soup.select("div.row div.col-sm-12 table.ntable tr")[8].select("td")[1].text.strip()
+        former_name = trs[6].select("td")[1].text.strip()
         base['曾用名'] = former_name
-        contributors = soup.select("div.row div.col-sm-12 table.ntable tr")[8].select("td")[3].text.strip()
+        contributors = trs[5].select("td")[3].text.strip()
         base['参保人数'] = contributors
-        staff_size = soup.select("div.row div.col-sm-12 table.ntable tr")[9].select("td")[1].text.strip()
+        staff_size = trs[5].select("td")[1].text.strip()
         base['人员规模'] = staff_size
-        business_term = soup.select("div.row div.col-sm-12 table.ntable tr")[9].select("td")[3].text.strip()
+        business_term = trs[4].select("td")[3].text.strip()
         base['营业期限'] = business_term
-        address = soup.select("div.row div.col-sm-12 table.ntable tr")[10].select("td")[1].text.strip().split('\n')[0]
+        address = trs[7].select("td")[1].text.strip()
         base['企业地址'] = address
-        scope_of_business = soup.select("div.row div.col-sm-12 table.ntable tr")[11].select("td")[1].text.strip()
+        scope_of_business = trs[8].select("td")[1].text.strip()
         base['经营范围'] = scope_of_business
+        self.logger.info('[basic_info has been crawled.]')
 
-        # partnern = soup.select("div.row div.col-sm-12 div.data_div section#partnern")[0]
-        # try:
-        #     numOfpartnern = partnern.select("div.tnavtab-content div.tcaption span.tbadge")[0].text
-        #     numOfpartnern = int(numOfpartnern)
-        # except:
-        #     numOfpartnern = 0
-
-
-        # # 股东信息不需要重新爬
-        # page_partner = 1
-        # partner_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=base&box=partners'%(company_code, companyName, str(page_partner))
-        # response_text = self.get_web_text(partner_url,headers, proxy)
-        # soup = BeautifulSoup(response_text, 'lxml')
 
         numOfpartnern = numbers['numOfshareHolders']
         numOfpartnern = int(re.findall(r'\d+', numOfpartnern)[0])
+        self.logger.info('[numOfshareholders: %d]'%numOfpartnern)
         shareholders = {}
         if numOfpartnern > 0:
             partnern = soup.select("div.row div.col-sm-12 div.data_div section#partnern")[0]
@@ -148,8 +140,9 @@ class QCC():
                 shareholders[ind]['认缴出资金额'] = capital_contribution
                 capital_contribution_date = tr.select("td.text-center")[2].text.strip()
                 shareholders[ind]['认缴出资日期'] = capital_contribution_date
-                time.sleep(random.uniform(1.5, 3.5))
+                time.sleep(random.uniform(8.5, 10))
         base['股东信息'] = shareholders
+        self.logger.info('[shareholders_info has been crawled.]')
         info['base'] = base
 
     # TODO CHECK yixia
@@ -160,11 +153,12 @@ class QCC():
 
         numOfwenshu = numbers['numOfwenshu']
         numOfwenshu = int(re.findall(r'\d+', numOfwenshu)[0])
+        self.logger.info('[numOfwenshu: %d]'%numOfwenshu)
         # 通过对比 例如裁判文书391 ，与序号的大小来判断是否还需要继续翻页
         wenshulist = {}
         if numOfwenshu > 0:
             page_wenshu = 1
-            wenshu_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=susong&box=wenshu&casetype=&casereason=' % (company_code, companyName, page_wenshu)
+            wenshu_url = 'https://www.qcc.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=susong&box=wenshu&casetype=&casereason=' % (company_code, companyName, page_wenshu)
             wenshu_ret = self.get_web_text(wenshu_url, headers, proxy)
             soup = BeautifulSoup(wenshu_ret, 'lxml')
             numOfHasCrawledList = 0
@@ -182,13 +176,15 @@ class QCC():
                     anjianshenfen = tr.select("td[width='20%']")[0].text.strip()
                     zhixingfayuan = tr.select("td[width='13%']")[0].text.strip()
                     wenshulist[index] = {"裁判文书标题": title, "案由": anyou, "发布日期": fabudate, "案号": annumber, "案件身份": anjianshenfen, "执行法院": zhixingfayuan}
-                    time.sleep(random.uniform(1.5, 3.5))
-                print('[wenshu_page_%s has been crawled.]' % str(page_wenshu))
-                print('[wenshu_num_%s has been crawled.]'%str(numOfHasCrawledList))
+                    time.sleep(random.uniform(8.5, 10.5))
+                self.logger.info('[wenshu_page_%s has been crawled.]' % str(page_wenshu))
+                self.logger.info('[wenshu_num_%s has been crawled.]'%str(numOfHasCrawledList))
+                # print('[wenshu_page_%s has been crawled.]' % str(page_wenshu))
+                # print('[wenshu_num_%s has been crawled.]'%str(numOfHasCrawledList))
 
                 if numOfHasCrawledList < numOfwenshu:
                     page_wenshu += 1
-                    wenshu_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=susong&box=wenshu&casetype=&casereason=' % (company_code, companyName, page_wenshu)
+                    wenshu_url = 'https://www.qcc.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=susong&box=wenshu&casetype=&casereason=' % (company_code, companyName, page_wenshu)
                     wenshu_ret = self.get_web_text(wenshu_url, headers, proxy)
                     soup = BeautifulSoup(wenshu_ret, 'lxml')
 
@@ -203,10 +199,11 @@ class QCC():
 
         numOftrademark = numbers['numOfbrand']
         numOftrademark = int(re.findall(r'\d+', numOftrademark)[0])
+        self.logger.info('[numOftrademark: %d]'%numOftrademark)
         trademarklist = {}
         if numOftrademark > 0:
             page_brand = 1
-            trademarklist_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=shangbiao&sbappdateyear=&sbstatus=&sbflowno=&sbintcls=' % (company_code, companyName, str(page_brand))
+            trademarklist_url = 'https://www.qcc.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=shangbiao&sbappdateyear=&sbstatus=&sbflowno=&sbintcls=' % (company_code, companyName, str(page_brand))
             response_test = self.get_web_text(trademarklist_url, headers, proxy)
             soup = BeautifulSoup(response_test, 'lxml')
             numOfHasCrawledList = 0
@@ -226,13 +223,15 @@ class QCC():
 
                     trademarklist[index] = {"商标": brand_img, "商标名": brand_name, "状态": status, "申请日期": apply_time,
                                             "注册号": registered_num, "国际分类": international_classification}
-                    time.sleep(random.uniform(1.5, 3.5))
-                print('[brand_page_%s has been crawled.]' % str(page_brand))
-                print('[brand_num_%s has been crawled.]'%str(numOfHasCrawledList))
+                    time.sleep(random.uniform(8.5, 10.5))
+                self.logger.info('[brand_page_%s has been crawled.]' % str(page_brand))
+                self.logger.info('[brand_num_%s has been crawled.]'%str(numOfHasCrawledList))
+                # print('[brand_page_%s has been crawled.]' % str(page_brand))
+                # print('[brand_num_%s has been crawled.]'%str(numOfHasCrawledList))
 
                 if numOfHasCrawledList < numOftrademark:
                     page_brand += 1
-                    trademarklist_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=shangbiao&sbappdateyear=&sbstatus=&sbflowno=&sbintcls=' % (
+                    trademarklist_url = 'https://www.qcc.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=shangbiao&sbappdateyear=&sbstatus=&sbflowno=&sbintcls=' % (
                     company_code, companyName, str(page_brand))
                     response_test = self.get_web_text(trademarklist_url, headers, proxy)
                     soup = BeautifulSoup(response_test, 'lxml')
@@ -244,10 +243,11 @@ class QCC():
 
         numOfpatent = numbers['numOfpatent']
         numOfpatent = int(re.findall(r'\d+', numOfpatent)[0])
+        self.logger.info('[numOfpatent: %d]'%numOfpatent)
         patent_list = {}
         if numOfpatent > 0:
             page_patent = 1
-            patent_list_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=zhuanli&zlpublicationyear=&zlipclist=&zlkindcode=&zllegalstatus=' % (company_code, companyName, str(page_patent))
+            patent_list_url = 'https://www.qcc.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=zhuanli&zlpublicationyear=&zlipclist=&zlkindcode=&zllegalstatus=' % (company_code, companyName, str(page_patent))
             response_test = self.get_web_text(patent_list_url, headers, proxy)
             soup = BeautifulSoup(response_test, 'lxml')
             numOfHasCrawledList = 0
@@ -265,7 +265,7 @@ class QCC():
                     patent_detail_url = tr.select("td")[4].select("a")[0]['href']
 
                     detail = {}
-                    patent_detail_url = 'https://www.qichacha.com' + patent_detail_url
+                    patent_detail_url = 'https://www.qcc.com' + patent_detail_url
                     response_text_detail = None
                     trial_times_detail = 0
                     while not response_text_detail:
@@ -273,10 +273,10 @@ class QCC():
                             response_text_detail = self.get_web_text(patent_detail_url, headers, proxy)
                         except:
                             response_text_detail = None
-                            if trial_times_detail > 10:
+                            if trial_times_detail > 3:
                                 break
                             trial_times_detail += 1
-                            time.sleep(random.uniform(1.5, 3.5))
+                            time.sleep(random.uniform(5.5, 8.5))
                     if response_text_detail:
                         soup_detail = BeautifulSoup(response_text_detail, 'lxml')
                         patent_detail = soup_detail.select("div.row div.col-md-9 table.ntable tr")
@@ -316,14 +316,15 @@ class QCC():
                         detail['摘要'] = detail_abstract
 
                     patent_list[index] = {"专利类型": patent_type, "公开（公告）号": public_num, "公开（公告）日期": public_date, "名称": patent_name, "详情": detail}
-                    time.sleep(random.uniform(1.5, 3.0))
-
-                print('[patent_page_%s has been crawled.]' % str(page_patent))
-                print('[patent_num_%s has been crawled.]'%str(numOfHasCrawledList))
+                    time.sleep(random.uniform(8.5, 10.0))
+                self.logger.info('[patent_page_%s has been crawled.]' % str(page_patent))
+                self.logger.info('[patent_num_%s has been crawled.]'%str(numOfHasCrawledList))
+                # print('[patent_page_%s has been crawled.]' % str(page_patent))
+                # print('[patent_num_%s has been crawled.]'%str(numOfHasCrawledList))
 
                 if numOfHasCrawledList < numOfpatent:
                     page_patent += 1
-                    patent_list_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=zhuanli&zlpublicationyear=&zlipclist=&zlkindcode=&zllegalstatus=' % (company_code, companyName, str(page_patent))
+                    patent_list_url = 'https://www.qcc.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=zhuanli&zlpublicationyear=&zlipclist=&zlkindcode=&zllegalstatus=' % (company_code, companyName, str(page_patent))
                     response_test = self.get_web_text(patent_list_url, headers, proxy)
                     soup = BeautifulSoup(response_test, 'lxml')
 
@@ -333,11 +334,12 @@ class QCC():
 
         numOfcertificate = numbers['numOfcertificate']
         numOfcertificate = int(re.findall(r'\d+', numOfcertificate)[0])
+        self.logger.info('[numOfcertificate: %d]'%numOfcertificate)
         certificatelist = {}
 
         if numOfcertificate > 0:
             page_certificate = 1
-            certificate_list_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=zhengshu&zscertCategory='%(company_code, companyName, str(page_certificate))
+            certificate_list_url = 'https://www.qcc.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=zhengshu&zscertCategory='%(company_code, companyName, str(page_certificate))
             response_text = self.get_web_text(certificate_list_url, headers, proxy)
             soup = BeautifulSoup(response_text, 'lxml')
             numOfHasCrawledList = 0
@@ -363,25 +365,26 @@ class QCC():
                     response_text_detail = None
                     while not response_text_detail:
                         try:
-                            response_text_detail = self.get_web_text('https://www.qichacha.com/company_zhengshuView', headers, proxy, querystring, post=True)
+                            response_text_detail = self.get_web_text('https://www.qcc.com/company_zhengshuView', headers, proxy, querystring, post=True)
                         except:
                             response_text_detail = None
-                            if trial_times > 10:
+                            if trial_times > 3:
                                 break
                             trial_times += 1
-                            time.sleep(random.uniform(1.5, 3.5))
+                            time.sleep(random.uniform(5.5, 8.5))
                     if response_text_detail:
                         certificate_detail_dct = json.loads(response_text_detail)
 
                     certificatelist[index] = {"证书类型": certificatetype, "证书名称":certificatename, "证书编号":certificatenum,"发证日期":certificate_public_date, "截止日期": certificate_due_date, "证书详情": certificate_detail_dct}
-                    time.sleep(random.uniform(0.5, 1.5))
-
-                print('[certificate_page_%s has been crawled.]' % str(page_certificate))
-                print('[certificate_num_%s has been crawled.]' % str(numOfHasCrawledList))
+                    time.sleep(random.uniform(8.5, 10.5))
+                self.logger.info('[certificate_page_%s has been crawled.]' % str(page_certificate))
+                self.logger.info('[certificate_num_%s has been crawled.]' % str(numOfHasCrawledList))
+                # print('[certificate_page_%s has been crawled.]' % str(page_certificate))
+                # print('[certificate_num_%s has been crawled.]' % str(numOfHasCrawledList))
 
                 if numOfHasCrawledList < numOfcertificate:
                     page_certificate += 1
-                    certificate_list_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=zhengshu&zscertCategory=' % (company_code, companyName, str(page_certificate))
+                    certificate_list_url = 'https://www.qcc.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=zhengshu&zscertCategory=' % (company_code, companyName, str(page_certificate))
                     response_text = self.get_web_text(certificate_list_url, headers, proxy)
                     soup = BeautifulSoup(response_text, 'lxml')
 
@@ -390,10 +393,11 @@ class QCC():
 
         numOfcopyright = numbers['numOfcopyright']
         numOfcopyright = int(re.findall(r'\d+', numOfcopyright)[0])
+        self.logger.info('[numOfcopyright: %d]'%numOfcopyright)
         copyrightlist = {}
         if numOfcopyright > 0:
             page_copyright = 1
-            copyright_list_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=zzq'%(company_code, companyName, str(page_copyright))
+            copyright_list_url = 'https://www.qcc.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=zzq'%(company_code, companyName, str(page_copyright))
             response_text = self.get_web_text(copyright_list_url, headers, proxy)
             soup = BeautifulSoup(response_text, 'lxml')
             numOfHasCrawledList = 0
@@ -412,13 +416,15 @@ class QCC():
                     registrationType = tr.select("td.text-center")[4].text.strip()
 
                     copyrightlist[index] = {"作品名称": titleOfworks, "首次发表日期": initdate, "创作完成日期": enddate,"登记号":registrationNo, "登记日期":registrationdate,"登记类别":registrationType}
-                    time.sleep(random.uniform(1.5, 2.5))
-                print('[copyright_page_%s has been crawled.]' % str(page_copyright))
-                print('[copyright_num_%s has been crawled.]' % str(numOfHasCrawledList))
+                    time.sleep(random.uniform(8.5, 10.5))
+                self.logger.info('[copyright_page_%s has been crawled.]' % str(page_copyright))
+                self.logger.info('[copyright_num_%s has been crawled.]' % str(numOfHasCrawledList))
+                # print('[copyright_page_%s has been crawled.]' % str(page_copyright))
+                # print('[copyright_num_%s has been crawled.]' % str(numOfHasCrawledList))
 
                 if numOfHasCrawledList < numOfcopyright:
                     page_copyright += 1
-                    copyright_list_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=zzq' % (company_code, companyName, str(page_copyright))
+                    copyright_list_url = 'https://www.qcc.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=zzq' % (company_code, companyName, str(page_copyright))
                     response_text = self.get_web_text(copyright_list_url, headers, proxy)
                     soup = BeautifulSoup(response_text, 'lxml')
 
@@ -428,10 +434,11 @@ class QCC():
 
         numOfrjzzq = numbers['numOfrjzzq']
         numOfrjzzq = int(re.findall(r'\d+', numOfrjzzq)[0])
+        self.logger.info('[numOfrjzzq: %d]'%numOfrjzzq)
         rjzzqlist = {}
         if numOfrjzzq > 0:
             page_software_copyright = 1
-            softwareCopyright_list_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=rjzzq'%(company_code, companyName, str(page_software_copyright))
+            softwareCopyright_list_url = 'https://www.qcc.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=rjzzq'%(company_code, companyName, str(page_software_copyright))
             response_text = self.get_web_text(softwareCopyright_list_url, headers, proxy)
             soup = BeautifulSoup(response_text, 'lxml')
             numOfHasCrawledList = 0
@@ -450,13 +457,15 @@ class QCC():
                     softapprovedate = tr.select("td.text-center")[4].text.strip()
 
                     rjzzqlist[index] = {"软件名称":softname, "版本号":softversion, "发布日期":softpublicdate, "软件简称":softsimplename, "登记号":softregistnum, "登记批准日期":softapprovedate}
-                    time.sleep(random.uniform(1.5, 2.5))
-                print('[rjzzq_page_%s has been crawled.]' % str(page_software_copyright))
-                print('[rjzzq_num_%s has been crawled.]' % str(numOfHasCrawledList))
+                    time.sleep(random.uniform(8.5, 10.5))
+                self.logger.info('[rjzzq_page_%s has been crawled.]' % str(page_software_copyright))
+                self.logger.info('[rjzzq_num_%s has been crawled.]' % str(numOfHasCrawledList))                    
+                # print('[rjzzq_page_%s has been crawled.]' % str(page_software_copyright))
+                # print('[rjzzq_num_%s has been crawled.]' % str(numOfHasCrawledList))
 
                 if numOfHasCrawledList < numOfrjzzq:
                     page_software_copyright += 1
-                    softwareCopyright_list_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=rjzzq' % (company_code, companyName, str(page_software_copyright))
+                    softwareCopyright_list_url = 'https://www.qcc.com/company_getinfos?unique=%s&companyname=%s&p=%s&tab=assets&box=rjzzq' % (company_code, companyName, str(page_software_copyright))
                     response_text = self.get_web_text(softwareCopyright_list_url, headers, proxy)
                     soup = BeautifulSoup(response_text, 'lxml')
 
@@ -472,6 +481,7 @@ class QCC():
 
         numOftaxCredit = numbers['numOftaxCredit']
         numOftaxCredit = int(re.findall(r'\d+', numOftaxCredit)[0])
+        self.logger.info('[numOftaxCredit: %d]'%numOftaxCredit)
         taxcreditlist = {}
         if numOftaxCredit > 0:
             taxcredit = soup.select("section#taxCreditList table.ntable.ntable-odd")[0]
@@ -483,8 +493,8 @@ class QCC():
                 level = taxcredit_tr[2*ind].select("td.text-center")[2].text.strip()
                 pingjiadanwei = taxcredit_tr[2*ind].select("td.text-center")[3].text.strip()
                 taxcreditlist[index] = {"评价年度": pingjiayear, "纳税人识别号": nashuirenid, "纳税信用等级": level, "评价单位": pingjiadanwei}
-                time.sleep(random.uniform(0.5, 1.5))
-
+                time.sleep(random.uniform(8.5, 10.5))
+        self.logger.info('[taxcredit has been crawled.]')
         run['税务信用'] = taxcreditlist
         info['run'] = run
 
@@ -537,50 +547,55 @@ class QCC():
             numbers['numOfrjzzq'] = numOfrjzzq
             numbers['numOfwenshu'] = numOfwenshu
             numbers['numOftaxCredit'] = numOftaxCredit
-
+        self.logger.info('[numOfitems has been crawled.]')
         return numbers
 
 
 
     def get_detail(self, company_code, headers, proxy):
         info = {}
-        url = 'https://www.qichacha.com/firm_%s.html' % company_code
+        url = 'https://www.qcc.com/firm_%s.html' % company_code
         companyName = self.get_company_name(url, headers, proxy)
         try_times = 0
         while not companyName:
-            if try_times > 5:
+            if try_times > 3:
                 break
+            time.sleep(random.uniform(5.5,7.5))
             companyName = self.get_company_name(url, headers, proxy)
             try_times += 1
         try:
             info['companyName'] = companyName[0].text.strip()
+            self.logger.info("[companyName: %s]"%info['companyName'])
             companyName = quote(companyName[0].text.strip())
         except Exception as e:
+            self.logger.warn("[can't get companyName_quote]")
             print(e)
             raise Exception("[can't get companyName_quote]")
+            
 
-
-        # base_url = 'https://www.qichacha.com/firm_%s.html#base'%company_code
-        # susong_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&tab=susong'%(company_code, companyName)
-        # asset_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&tab=asset'%(company_code, companyName)
+        # base_url = 'https://www.qcc.com/firm_%s.html#base'%company_code
+        # susong_url = 'https://www.qcc.com/company_getinfos?unique=%s&companyname=%s&tab=susong'%(company_code, companyName)
+        # asset_url = 'https://www.qcc.com/company_getinfos?unique=%s&companyname=%s&tab=asset'%(company_code, companyName)
         # 上面三个url用不到了
 
-        firm_url = 'https://www.qichacha.com/firm_%s.html' % (company_code)
-        run_url = 'https://www.qichacha.com/company_getinfos?unique=%s&companyname=%s&tab=run' % (company_code, companyName)
+        firm_url = 'https://www.qcc.com/firm_%s.html' % (company_code)
+        run_url = 'https://www.qcc.com/company_getinfos?unique=%s&companyname=%s&tab=run' % (company_code, companyName)
 
 
         numbers = self.get_item_nums(firm_url, headers, proxy)
+        time.sleep(random.uniform(3,5))
         if numbers:
             pass
         else:
+            self.logger.warn("[can't get numbers]")
             raise Exception("[can't get numbers]")
 
         self.get_base(info, firm_url, headers, proxy, company_code, companyName, numbers)
-        time.sleep(random.uniform(1.0,2.5))
+        time.sleep(random.uniform(5.0,6.5))
         self.get_susong(info, firm_url, headers, proxy, company_code, companyName, numbers)
-        time.sleep(random.uniform(1.0, 2.5))
+        time.sleep(random.uniform(4.5, 5.5))
         self.get_asset(info, firm_url, headers, proxy, company_code, companyName, numbers)
-        time.sleep(random.uniform(1.0, 2.5))
+        time.sleep(random.uniform(5.0, 5.5))
         self.get_run(info, run_url, headers, proxy, company_code, companyName, numbers)
 
         return info
@@ -594,10 +609,12 @@ class QCC():
 
 
     def run(self, company):
+        self.logger.info("[begin crawl company: %s]"%company)
         try:
             ret, proxy = self.get_para(company, headers, self.get_random_proxy(self.proxies))
         except Exception as e:
-            print("[can't get company_code]:", e)
+            self.logger.warn("[can't get company_code]")
+            print(e)
             self.write_to_file(company, self.notSuccPath)
             return
 
@@ -606,24 +623,43 @@ class QCC():
 
         # 若最终结果为空，说明没有爬到company_code
         if ret:
+            self.logger.info('[company_code: %s]'%str(ret))
             print('[company_code: %s]'%str(ret))
             try:
                 info = self.get_detail(ret, headers, proxy)
                 return info
             except Exception as e:
-                print("[can't get_detail]", e)
+                self.logger.warn("[can't get_detail]")
+                print(e)
                 self.write_to_file(company, self.notSuccPath)
                 return
         else:
-            print("[get None company_code]")
+            self.logger.warn("[get None company_code]")
+            # print("[get None company_code]")
             self.write_to_file(company, self.notSuccPath)
             return
 
 
 
 if __name__ == "__main__":
-    spider = QCC("./config/not_crawled_company", "./config/proxies")
-    info = spider.run("北京金漆镶嵌有限责任公司")
+    # 设置日志
+    logger = logging.getLogger('logger')
+    f_handler = logging.FileHandler(filename="./log.log",
+                                    encoding='utf-8',
+                                    mode='a') # 日志存在QCC同级目录下
+    s_handler = logging.StreamHandler()
+    logger.setLevel(logging.DEBUG)
+    f_handler.setLevel(logging.INFO)
+    s_handler.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(asctime)s %(name)s %(levelname)s %(funcName)s: %(message)s")
+    f_handler.setFormatter(formatter)
+    s_handler.setFormatter(formatter)
+    logger.addHandler(f_handler)
+    logger.addHandler(s_handler)
+
+
+    spider = QCC("./config/not_crawled_company", "./config/proxies", logger)
+    info = spider.run("北京融世纪信息技术有限公司")
     print(info)
 
     # result_path = "./config/ret"

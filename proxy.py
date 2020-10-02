@@ -87,7 +87,7 @@ def verifyproxy(proxies):
             print("代理不可用:{}:{}".format(ip, port))
     return usefulProxies
 
-proxies = get_proxy(5)
+proxies = get_proxy(10)
 
 with codecs.open("./config/proxies", "w", "utf-8") as f:
     f.write(json.dumps(proxies))
